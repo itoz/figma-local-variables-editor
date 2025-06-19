@@ -28,6 +28,8 @@ type Variable = {
   resolvedType: "COLOR" | "FLOAT";
   modeId: string;
   value: string;
+  description?: string;
+  scopes?: string[];
 };
 
 type VariableCollection = {
@@ -42,6 +44,8 @@ type VariableData = {
   valuesByMode: {
     [key: string]: any;
   };
+  description?: string;
+  scopes?: string[];
 };
 
 type VariablesResponse = {
@@ -102,6 +106,8 @@ export default function VariableEditor() {
             resolvedType: v.resolvedType,
             modeId,
             value,
+            description: v.description,
+            scopes: v.scopes,
           };
         });
 
@@ -191,7 +197,9 @@ export default function VariableEditor() {
               <TableRow>
                 <TableHead className="w-[200px]">Name</TableHead>
                 <TableHead className="w-[100px]">Type</TableHead>
-                <TableHead>Value</TableHead>
+                <TableHead className="w-[100px]">Scopes</TableHead>
+                <TableHead className="w-[200px]">Value</TableHead>
+                <TableHead>Description</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -199,12 +207,22 @@ export default function VariableEditor() {
                 <TableRow key={v.id}>
                   <TableCell className="font-medium">{v.name}</TableCell>
                   <TableCell>{v.resolvedType}</TableCell>
+                  <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
                   <TableCell>
-                    <Input
-                      value={v.value}
-                      onChange={(e) => handleChange(v.id, e.target.value)}
-                    />
+                    <div className="flex items-center gap-2">
+                      {v.resolvedType === "COLOR" && (
+                        <div
+                          className="w-4 h-4 rounded border"
+                          style={{ backgroundColor: v.value }}
+                        />
+                      )}
+                      <Input
+                        value={v.value}
+                        onChange={(e) => handleChange(v.id, e.target.value)}
+                      />
+                    </div>
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{v.description}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
