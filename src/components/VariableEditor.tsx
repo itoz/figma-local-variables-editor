@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
@@ -20,7 +21,7 @@ import {
   ToastViewport,
 } from "@/components/ui/toast";
 import { getVariables, updateVariable } from "@/lib/api/figma";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 type Variable = {
   id: string;
@@ -34,7 +35,10 @@ type Variable = {
 
 type VariableCollection = {
   id: string;
+  name: string;
   defaultModeId: string;
+  remote: boolean;
+  key: string;
   variableIds: string[];
 };
 
@@ -70,6 +74,13 @@ type ToastState = {
   variant: "default" | "destructive";
 };
 
+type GroupedVariables = {
+  [collectionId: string]: {
+    collection: VariableCollection;
+    variables: Variable[];
+  };
+};
+
 export default function VariableEditor() {
   const [variables, setVariables] = useState<Variable[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,12 +91,19 @@ export default function VariableEditor() {
     description: "",
     variant: "default",
   });
+  const [groupedVars, setGroupedVars] = useState<GroupedVariables>({});
 
   useEffect(() => {
     const fetchVariables = async () => {
       setLoading(true);
       try {
         const data = (await getVariables()) as VariablesResponse;
+        console.log('Collections:', Object.values(data.meta.variableCollections).map(c => ({
+          id: c.id,
+          name: c.name,
+          remote: c.remote,
+          key: c.key
+        })));
         const meta = data.meta;
 
         // Get all collections and their modes
@@ -123,36 +141,46 @@ export default function VariableEditor() {
           return 'rgba(0, 0, 0, 1)';
         };
 
-        // Process variables from all collections
-        const vars = Object.entries(meta.variables).map(([id, v]) => {
-          const modeId = collectionModes.get(v.variableCollectionId) || '';
-          let value = "";
+        const groupedVars = collections.reduce<GroupedVariables>((acc, collection) => {
+          const collectionVars = Object.entries(meta.variables)
+            .filter(([_, v]) => v.variableCollectionId === collection.id)
+            .map(([id, v]) => {
+              const modeId = collectionModes.get(v.variableCollectionId) || '';
+              let value = "";
 
-          if (v.resolvedType === "COLOR") {
-            value = resolveColorValue(id, v.variableCollectionId);
-          } else if (v.resolvedType === "FLOAT") {
-            const valueData = v.valuesByMode[modeId];
-            if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
-              const resolvedVar = meta.variables[valueData.id];
-              const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
-              value = String(resolvedVar.valuesByMode[resolvedModeId]);
-            } else {
-              value = String(valueData);
-            }
-          }
+              if (v.resolvedType === "COLOR") {
+                value = resolveColorValue(id, v.variableCollectionId);
+              } else if (v.resolvedType === "FLOAT") {
+                const valueData = v.valuesByMode[modeId];
+                if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+                  const resolvedVar = meta.variables[valueData.id];
+                  const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
+                  value = String(resolvedVar.valuesByMode[resolvedModeId]);
+                } else {
+                  value = String(valueData);
+                }
+              }
 
-          return {
-            id: v.id,
-            name: v.name,
-            resolvedType: v.resolvedType,
-            modeId,
-            value,
-            description: v.description,
-            scopes: v.scopes,
+              return {
+                id: v.id,
+                name: v.name,
+                resolvedType: v.resolvedType,
+                modeId,
+                value,
+                description: v.description,
+                scopes: v.scopes,
+              };
+            });
+
+          acc[collection.id] = {
+            collection,
+            variables: collectionVars,
           };
-        });
+          return acc;
+        }, {});
 
-        setVariables(vars);
+        setGroupedVars(groupedVars);
+        setVariables(Object.values(groupedVars).flatMap(g => g.variables));
       } catch (error) {
         console.error("Failed to fetch variables:", error);
         setToast({
@@ -219,6 +247,40 @@ export default function VariableEditor() {
     }
   };
 
+  const updateDescription = async (variableId: string, description: string) => {
+    try {
+      const variable = variables.find((v) => v.id === variableId);
+      if (!variable) return;
+
+      await updateVariable(variableId, variable.modeId, {
+        type: "DESCRIPTION_UPDATE",
+        description,
+      });
+
+      // Update local state
+      setVariables((prev) =>
+        prev.map((v) =>
+          v.id === variableId ? { ...v, description } : v
+        )
+      );
+
+      setToast({
+        open: true,
+        title: "成功",
+        description: "説明を更新しました。",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error("Failed to update description:", error);
+      setToast({
+        open: true,
+        title: "エラー",
+        description: "説明の更新に失敗しました。",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto py-10">
@@ -244,27 +306,45 @@ export default function VariableEditor() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {variables.map((v) => (
-                <TableRow key={v.id}>
-                  <TableCell className="font-medium">{v.name}</TableCell>
-                  <TableCell>{v.resolvedType}</TableCell>
-                  <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {v.resolvedType === "COLOR" && (
-                        <div
-                          className="w-4 h-4 rounded border"
-                          style={{ backgroundColor: v.value }}
+              {Object.entries(groupedVars).map(([collectionId, group]) => (
+                <React.Fragment key={collectionId}>
+                  <TableRow className="bg-muted/50">
+                    <TableCell colSpan={5} className="py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{group.collection.name}</span>
+                        {group.collection.remote && (
+                          <Badge variant="secondary" className="text-xs">Remote</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {group.variables.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-medium">{v.name}</TableCell>
+                      <TableCell>{v.resolvedType}</TableCell>
+                      <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {v.resolvedType === "COLOR" && (
+                            <div
+                              className="w-4 h-4 rounded border"
+                              style={{ backgroundColor: v.value }}
+                            />
+                          )}
+                          {v.value}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        <Input
+                          value={v.description || ""}
+                          onChange={(e) => updateDescription(v.id, e.target.value)}
+                          className="h-6 text-xs"
+                          placeholder="説明を入力..."
                         />
-                      )}
-                      <Input
-                        value={v.value}
-                        onChange={(e) => handleChange(v.id, e.target.value)}
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{v.description}</TableCell>
-                </TableRow>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
