@@ -33,6 +33,7 @@ type Variable = {
 };
 
 type VariableCollection = {
+  id: string;
   defaultModeId: string;
   variableIds: string[];
 };
@@ -46,6 +47,9 @@ type VariableData = {
   };
   description?: string;
   scopes?: string[];
+  variableCollectionId: string;
+  remote?: boolean;
+  key?: string;
 };
 
 type VariablesResponse = {
@@ -83,21 +87,58 @@ export default function VariableEditor() {
       try {
         const data = (await getVariables()) as VariablesResponse;
         const meta = data.meta;
-        const collection = Object.values(meta.variableCollections)[0];
-        const modeId = collection.defaultModeId;
 
-        const vars = collection.variableIds.map((id: string) => {
-          const v = meta.variables[id];
-          const valueData = v.valuesByMode[modeId];
+        // Get all collections and their modes
+        const collections = Object.values(meta.variableCollections);
+        const collectionModes = new Map(
+          collections.map(collection => [collection.id, collection.defaultModeId])
+        );
+
+        const resolveColorValue = (variableId: string, collectionId: string): string => {
+          const variable = meta.variables[variableId];
+          if (!variable) {
+            console.warn('Variable not found:', variableId);
+            return 'rgba(0, 0, 0, 1)';
+          }
+
+          const modeId = collectionModes.get(variable.variableCollectionId);
+          if (!modeId) {
+            console.warn('Mode not found for collection:', variable.variableCollectionId);
+            return 'rgba(0, 0, 0, 1)';
+          }
+
+          const valueData = variable.valuesByMode[modeId];
+
+          if (valueData && typeof valueData === 'object') {
+            if ('type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+              return resolveColorValue(valueData.id, variable.variableCollectionId);
+            }
+            if ('r' in valueData) {
+              const { r, g, b, a } = valueData;
+              return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+            }
+          }
+
+          console.warn('Unexpected value data format:', valueData);
+          return 'rgba(0, 0, 0, 1)';
+        };
+
+        // Process variables from all collections
+        const vars = Object.entries(meta.variables).map(([id, v]) => {
+          const modeId = collectionModes.get(v.variableCollectionId) || '';
           let value = "";
 
           if (v.resolvedType === "COLOR") {
-            const { r, g, b, a } = valueData;
-            value = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(
-              b * 255
-            )}, ${a})`;
+            value = resolveColorValue(id, v.variableCollectionId);
           } else if (v.resolvedType === "FLOAT") {
-            value = String(valueData);
+            const valueData = v.valuesByMode[modeId];
+            if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+              const resolvedVar = meta.variables[valueData.id];
+              const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
+              value = String(resolvedVar.valuesByMode[resolvedModeId]);
+            } else {
+              value = String(valueData);
+            }
           }
 
           return {
