@@ -33,11 +33,14 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { variableId, description, fileKey } = body;
+    const { variableId, description, fileKey, value, modeId, resolvedType } =
+      body;
 
     console.log("PATCH request body:", JSON.stringify(body, null, 2));
     console.log("Variable ID:", variableId);
     console.log("Description:", description);
+    console.log("Value:", value);
+    console.log("Mode ID:", modeId);
     console.log("File Key:", fileKey);
     console.log("FIGMA_TOKEN exists:", !!process.env.FIGMA_TOKEN);
 
@@ -48,23 +51,30 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (description === undefined) {
-      return NextResponse.json(
-        { error: "Description is required for update" },
-        { status: 400 }
-      );
-    }
+    // Build the payload for bulk update
+    const payload: any = {};
 
-    // Use the correct Figma API endpoint for bulk variable operations
-    const payload = {
-      variables: [
+    // Update variable metadata (description) if provided
+    if (description !== undefined) {
+      payload.variables = [
         {
           action: "UPDATE",
           id: variableId,
           description: description,
         },
-      ],
-    };
+      ];
+    }
+
+    // Update variable value if provided
+    if (value !== undefined && modeId) {
+      payload.variableModeValues = [
+        {
+          variableId: variableId,
+          modeId: modeId,
+          value: value,
+        },
+      ];
+    }
 
     console.log("Sending to Figma API:", JSON.stringify(payload, null, 2));
     console.log(

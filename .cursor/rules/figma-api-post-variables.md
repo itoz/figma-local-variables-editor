@@ -1,6 +1,7 @@
 - https://www.figma.com/plugin-docs/api/Variable/
 
-POST variables
+# POST variables
+
 This API is available to full members of Enterprise orgs. To call this API on a file, you must have edit access to the file.
 
 The POST /v1/files/:file_key/variables endpoint lets you bulk create, update, and delete variables and variable collections.
@@ -114,7 +115,8 @@ Error codes Description
 404 The specified file was not found
 413 Request payload too large. The max allowed body size is 4MB.
 
-Examples
+## Examples
+
 The following examples are request bodies for the POST variables endpoint.
 
 To create a new variable collection:

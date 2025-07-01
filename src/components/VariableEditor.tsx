@@ -20,7 +20,14 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast";
-import { getVariables, updateVariable } from "@/lib/api/figma";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { getVariables, updateVariable as updateVariableAPI } from "@/lib/api/figma";
+import { rgbaToHex } from "@/lib/utils";
 import React, { useState } from "react";
 
 type Variable = {
@@ -34,6 +41,8 @@ type Variable = {
   variableCollectionId?: string;
   remote?: boolean;
   key?: string;
+  isAlias?: boolean;
+  aliasTarget?: string;
 };
 
 type VariableCollection = {
@@ -195,12 +204,25 @@ export default function VariableEditor() {
           .map(([id, v]) => {
             const modeId = collectionModes.get(v.variableCollectionId) || '';
             let value = "";
+            let isAlias = false;
+            let aliasTarget = "";
 
             if (v.resolvedType === "COLOR") {
-              value = resolveColorValue(id, v.variableCollectionId);
+              const valueData = v.valuesByMode[modeId];
+              if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+                isAlias = true;
+                const targetVar = meta.variables[valueData.id];
+                aliasTarget = targetVar ? targetVar.name : valueData.id;
+                value = resolveColorValue(id, v.variableCollectionId);
+              } else {
+                value = resolveColorValue(id, v.variableCollectionId);
+              }
             } else if (v.resolvedType === "FLOAT") {
               const valueData = v.valuesByMode[modeId];
               if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+                isAlias = true;
+                const targetVar = meta.variables[valueData.id];
+                aliasTarget = targetVar ? targetVar.name : valueData.id;
                 const resolvedVar = meta.variables[valueData.id];
                 const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
                 value = String(resolvedVar.valuesByMode[resolvedModeId]);
@@ -220,6 +242,8 @@ export default function VariableEditor() {
               variableCollectionId: v.variableCollectionId,
               remote: v.remote,
               key: v.key,
+              isAlias,
+              aliasTarget,
             };
           });
 
@@ -262,11 +286,7 @@ export default function VariableEditor() {
     }
   };
 
-  const handleChange = (id: string, newValue: string) => {
-    setVariables((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, value: newValue } : v))
-    );
-  };
+
 
   const updateDescription = (variableId: string, description: string) => {
     // Update local state only, don't send API request immediately
@@ -291,83 +311,17 @@ export default function VariableEditor() {
     });
   };
 
-  const updateSingleVariable = async (variableId: string) => {
+  const updateVariable = async (variableId: string) => {
     setUpdatingIds(prev => new Set(prev).add(variableId));
 
     try {
       const variable = variables.find((v) => v.id === variableId);
       if (!variable) return;
 
-      // Update both value and description
-      let newValue: any;
-
-      if (variable.resolvedType === "COLOR") {
-        const match = variable.value.match(
-          /rgba?\((\d+),\s*(\d+),\s*(\d+),\s*(\d+(\.\d+)?)\)/
-        );
-        if (!match) {
-          throw new Error("Invalid color format");
-        }
-        const [_, r, g, b, a] = match;
-        newValue = {
-          r: parseInt(r) / 255,
-          g: parseInt(g) / 255,
-          b: parseInt(b) / 255,
-          a: parseFloat(a),
-        };
-      } else if (variable.resolvedType === "FLOAT") {
-        newValue = parseFloat(variable.value);
-      }
-
-      // Update the variable value
-      await updateVariable(variable.id, variable.modeId, newValue, fileKey);
-
-      // Update the description if it exists
-      if (variable.description !== undefined && variable.description !== null) {
-        await updateVariable(variable.id, variable.modeId, {
-          type: "DESCRIPTION_UPDATE",
-          description: variable.description,
-        }, fileKey);
-      }
-
-      setToast({
-        open: true,
-        title: "成功",
-        description: `変数 "${variable.name}" を更新しました。`,
-        variant: "default",
-      });
-    } catch (error) {
-      console.error("Failed to update variable:", error);
-      setToast({
-        open: true,
-        title: "エラー",
-        description: "変数の更新に失敗しました。",
-        variant: "destructive",
-      });
-    } finally {
-      setUpdatingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(variableId);
-        return newSet;
-      });
-    }
-  };
-
-  const updateDescriptionOnly = async (variableId: string) => {
-    setUpdatingIds(prev => new Set(prev).add(variableId));
-
-    try {
-      const variable = variables.find((v) => v.id === variableId);
-      if (!variable) {
-        console.error("Variable not found:", variableId);
-        return;
-      }
-
-      console.log("Updating description for variable:", {
+      console.log("Updating variable description:", {
         id: variable.id,
         name: variable.name,
         description: variable.description,
-        modeId: variable.modeId,
         fileKey: fileKey
       });
 
@@ -376,17 +330,21 @@ export default function VariableEditor() {
         setToast({
           open: true,
           title: "エラー",
-          description: "リモート変数の説明は更新できません。元のファイルで編集してください。",
+          description: "リモート変数は更新できません。元のファイルで編集してください。",
           variant: "destructive",
         });
         return;
       }
 
-      // Update only the description
-      await updateVariable(variable.id, variable.modeId, {
-        type: "DESCRIPTION_UPDATE",
-        description: variable.description || "",
-      }, fileKey);
+      // Update description only via API
+      await updateVariableAPI(
+        variable.id,
+        variable.modeId,
+        null, // No value update
+        fileKey,
+        variable.description,
+        variable.resolvedType
+      );
 
       setToast({
         open: true,
@@ -395,11 +353,11 @@ export default function VariableEditor() {
         variant: "default",
       });
     } catch (error) {
-      console.error("Failed to update description:", error);
+      console.error("Failed to update variable description:", error);
       setToast({
         open: true,
         title: "エラー",
-        description: "説明の更新に失敗しました。",
+        description: "変数の説明の更新に失敗しました。",
         variant: "destructive",
       });
     } finally {
@@ -412,7 +370,7 @@ export default function VariableEditor() {
   };
 
   return (
-    <>
+    <TooltipProvider>
       <div className="container mx-auto py-10">
         <div className="mb-6 space-y-4">
           <div className="flex gap-2">
@@ -489,12 +447,29 @@ export default function VariableEditor() {
                                 style={{ backgroundColor: v.value }}
                               />
                             )}
-                            <Input
-                              value={v.value}
-                              onChange={(e) => handleChange(v.id, e.target.value)}
-                              className="h-6 text-xs"
-                              placeholder="値を入力..."
-                            />
+                            {v.isAlias ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="text-xs font-mono cursor-help bg-gray-100 hover:bg-gray-200">
+                                      {v.aliasTarget}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="space-y-1">
+                                      {v.resolvedType === "COLOR" && (
+                                        <div className="text-xs">HEX: {rgbaToHex(v.value)}</div>
+                                      )}
+                                      <div className="text-xs">RGBA: {v.value}</div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {v.resolvedType === "COLOR" ? rgbaToHex(v.value) : v.value}
+                              </span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -510,7 +485,7 @@ export default function VariableEditor() {
                           <div className="flex gap-1">
                             <Button
                               size="sm"
-                              onClick={() => updateSingleVariable(v.id)}
+                              onClick={() => updateVariable(v.id)}
                               disabled={updatingIds.has(v.id) || v.remote}
                               className="h-6 px-2 text-xs"
                             >
@@ -520,23 +495,7 @@ export default function VariableEditor() {
                                   更新中
                                 </>
                               ) : (
-                                "値"
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateDescriptionOnly(v.id)}
-                              disabled={updatingIds.has(v.id) || v.remote}
-                              className="h-6 px-2 text-xs"
-                            >
-                              {updatingIds.has(v.id) ? (
-                                <>
-                                  <Loader size={12} className="mr-1" />
-                                  更新中
-                                </>
-                              ) : (
-                                "説明"
+                                "説明更新"
                               )}
                             </Button>
                           </div>
@@ -563,6 +522,6 @@ export default function VariableEditor() {
         </Toast>
         <ToastViewport />
       </ToastProvider>
-    </>
+    </TooltipProvider>
   );
 } 

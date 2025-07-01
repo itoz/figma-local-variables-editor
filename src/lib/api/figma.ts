@@ -11,21 +11,34 @@ export async function updateVariable(
   variableId: string,
   modeId: string,
   value: any,
-  fileKey: string
+  fileKey: string,
+  description?: string,
+  resolvedType?: string
 ) {
-  const requestBody = {
+  const requestBody: any = {
     variableId,
     fileKey,
-    ...(value.type === "DESCRIPTION_UPDATE"
-      ? { description: value.description }
-      : { valuesByMode: { [modeId]: value } }),
+    modeId,
   };
+
+  // Add description if provided
+  if (description !== undefined) {
+    requestBody.description = description;
+  }
+
+  // Add value if provided (and not a description-only update)
+  if (value !== undefined && !value.type) {
+    requestBody.value = value;
+    requestBody.resolvedType = resolvedType;
+  }
 
   console.log("updateVariable called with:", {
     variableId,
     modeId,
     value,
     fileKey,
+    description,
+    resolvedType,
     requestBody,
   });
 
