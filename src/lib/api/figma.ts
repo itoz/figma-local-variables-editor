@@ -1,5 +1,8 @@
-export async function getVariables() {
-  const res = await fetch("/api/figma/variables");
+export async function getVariables(fileKey?: string) {
+  const url = fileKey
+    ? `/api/figma/variables?fileKey=${fileKey}`
+    : "/api/figma/variables";
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch variables");
   return res.json();
 }
@@ -16,9 +19,9 @@ export async function updateVariable(
     },
     body: JSON.stringify({
       variableId,
-      valuesByMode: {
-        [modeId]: value,
-      },
+      ...(value.type === "DESCRIPTION_UPDATE"
+        ? { description: value.description }
+        : { valuesByMode: { [modeId]: value } }),
     }),
   });
   if (!res.ok) throw new Error("Failed to update variable");

@@ -21,7 +21,7 @@ import {
   ToastViewport,
 } from "@/components/ui/toast";
 import { getVariables, updateVariable } from "@/lib/api/figma";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 type Variable = {
   id: string;
@@ -83,119 +83,159 @@ type GroupedVariables = {
 
 export default function VariableEditor() {
   const [variables, setVariables] = useState<Variable[]>([]);
+  const [groupedVars, setGroupedVars] = useState<GroupedVariables>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [figmaUrl, setFigmaUrl] = useState("WZ1EEljhqZdxA3FCYasvz1");
   const [toast, setToast] = useState<ToastState>({
     open: false,
     title: "",
     description: "",
     variant: "default",
   });
-  const [groupedVars, setGroupedVars] = useState<GroupedVariables>({});
 
-  useEffect(() => {
-    const fetchVariables = async () => {
-      setLoading(true);
-      try {
-        const data = (await getVariables()) as VariablesResponse;
-        console.log('Collections:', Object.values(data.meta.variableCollections).map(c => ({
-          id: c.id,
-          name: c.name,
-          remote: c.remote,
-          key: c.key
-        })));
-        const meta = data.meta;
+  // Extract file key from Figma URL or return as-is if it's already a file key
+  const extractFileKey = (input: string): string | null => {
+    const trimmed = input.trim();
 
-        // Get all collections and their modes
-        const collections = Object.values(meta.variableCollections);
-        const collectionModes = new Map(
-          collections.map(collection => [collection.id, collection.defaultModeId])
-        );
+    // If it looks like a URL, extract the file key
+    const match = trimmed.match(/figma\.com\/(?:file|design)\/([a-zA-Z0-9]+)/);
+    if (match) {
+      return match[1];
+    }
 
-        const resolveColorValue = (variableId: string, collectionId: string): string => {
-          const variable = meta.variables[variableId];
-          if (!variable) {
-            console.warn('Variable not found:', variableId);
-            return 'rgba(0, 0, 0, 1)';
-          }
+    // If it's already a file key (alphanumeric string), return as-is
+    if (/^[a-zA-Z0-9]+$/.test(trimmed)) {
+      return trimmed;
+    }
 
-          const modeId = collectionModes.get(variable.variableCollectionId);
-          if (!modeId) {
-            console.warn('Mode not found for collection:', variable.variableCollectionId);
-            return 'rgba(0, 0, 0, 1)';
-          }
+    return null;
+  };
 
-          const valueData = variable.valuesByMode[modeId];
+  const handleFetchFromUrl = () => {
+    if (!figmaUrl.trim()) {
+      setToast({
+        open: true,
+        title: "エラー",
+        description: "FigmaファイルのURLまたはファイルキーを入力してください。",
+        variant: "destructive",
+      });
+      return;
+    }
 
-          if (valueData && typeof valueData === 'object') {
-            if ('type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
-              return resolveColorValue(valueData.id, variable.variableCollectionId);
-            }
-            if ('r' in valueData) {
-              const { r, g, b, a } = valueData;
-              return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
-            }
-          }
+    const fileKey = extractFileKey(figmaUrl);
+    if (!fileKey) {
+      setToast({
+        open: true,
+        title: "エラー",
+        description: "有効なFigmaファイルのURLまたはファイルキーを入力してください。",
+        variant: "destructive",
+      });
+      return;
+    }
 
-          console.warn('Unexpected value data format:', valueData);
+    fetchVariables(fileKey);
+  };
+
+  const fetchVariables = async (fileKey?: string) => {
+    setLoading(true);
+    try {
+      const data = (await getVariables(fileKey)) as VariablesResponse;
+      console.log('Collections:', Object.values(data.meta.variableCollections).map(c => ({
+        id: c.id,
+        name: c.name,
+        remote: c.remote,
+        key: c.key
+      })));
+      const meta = data.meta;
+
+      // Get all collections and their modes
+      const collections = Object.values(meta.variableCollections);
+      const collectionModes = new Map(
+        collections.map(collection => [collection.id, collection.defaultModeId])
+      );
+
+      const resolveColorValue = (variableId: string, collectionId: string): string => {
+        const variable = meta.variables[variableId];
+        if (!variable) {
+          console.warn('Variable not found:', variableId);
           return 'rgba(0, 0, 0, 1)';
-        };
+        }
 
-        const groupedVars = collections.reduce<GroupedVariables>((acc, collection) => {
-          const collectionVars = Object.entries(meta.variables)
-            .filter(([_, v]) => v.variableCollectionId === collection.id)
-            .map(([id, v]) => {
-              const modeId = collectionModes.get(v.variableCollectionId) || '';
-              let value = "";
+        const modeId = collectionModes.get(variable.variableCollectionId);
+        if (!modeId) {
+          console.warn('Mode not found for collection:', variable.variableCollectionId);
+          return 'rgba(0, 0, 0, 1)';
+        }
 
-              if (v.resolvedType === "COLOR") {
-                value = resolveColorValue(id, v.variableCollectionId);
-              } else if (v.resolvedType === "FLOAT") {
-                const valueData = v.valuesByMode[modeId];
-                if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
-                  const resolvedVar = meta.variables[valueData.id];
-                  const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
-                  value = String(resolvedVar.valuesByMode[resolvedModeId]);
-                } else {
-                  value = String(valueData);
-                }
+        const valueData = variable.valuesByMode[modeId];
+
+        if (valueData && typeof valueData === 'object') {
+          if ('type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+            return resolveColorValue(valueData.id, variable.variableCollectionId);
+          }
+          if ('r' in valueData) {
+            const { r, g, b, a } = valueData;
+            return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+          }
+        }
+
+        console.warn('Unexpected value data format:', valueData);
+        return 'rgba(0, 0, 0, 1)';
+      };
+
+      const groupedVars = collections.reduce<GroupedVariables>((acc, collection) => {
+        const collectionVars = Object.entries(meta.variables)
+          .filter(([_, v]) => v.variableCollectionId === collection.id)
+          .map(([id, v]) => {
+            const modeId = collectionModes.get(v.variableCollectionId) || '';
+            let value = "";
+
+            if (v.resolvedType === "COLOR") {
+              value = resolveColorValue(id, v.variableCollectionId);
+            } else if (v.resolvedType === "FLOAT") {
+              const valueData = v.valuesByMode[modeId];
+              if (valueData && typeof valueData === 'object' && 'type' in valueData && valueData.type === 'VARIABLE_ALIAS') {
+                const resolvedVar = meta.variables[valueData.id];
+                const resolvedModeId = collectionModes.get(resolvedVar.variableCollectionId) || '';
+                value = String(resolvedVar.valuesByMode[resolvedModeId]);
+              } else {
+                value = String(valueData);
               }
+            }
 
-              return {
-                id: v.id,
-                name: v.name,
-                resolvedType: v.resolvedType,
-                modeId,
-                value,
-                description: v.description,
-                scopes: v.scopes,
-              };
-            });
+            return {
+              id: v.id,
+              name: v.name,
+              resolvedType: v.resolvedType,
+              modeId,
+              value,
+              description: v.description,
+              scopes: v.scopes,
+            };
+          });
 
-          acc[collection.id] = {
-            collection,
-            variables: collectionVars,
-          };
-          return acc;
-        }, {});
+        acc[collection.id] = {
+          collection,
+          variables: collectionVars,
+        };
+        return acc;
+      }, {});
 
-        setGroupedVars(groupedVars);
-        setVariables(Object.values(groupedVars).flatMap(g => g.variables));
-      } catch (error) {
-        console.error("Failed to fetch variables:", error);
-        setToast({
-          open: true,
-          title: "エラー",
-          description: "変数の取得に失敗しました。",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchVariables();
-  }, []);
+      setGroupedVars(groupedVars);
+      setVariables(Object.values(groupedVars).flatMap(g => g.variables));
+    } catch (error) {
+      console.error("Failed to fetch variables:", error);
+      setToast({
+        open: true,
+        title: "エラー",
+        description: "変数の取得に失敗しました。",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (id: string, newValue: string) => {
     setVariables((prev) =>
@@ -281,86 +321,114 @@ export default function VariableEditor() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="container mx-auto py-10">
-        <div className="flex min-h-[400px] items-center justify-center rounded-md border">
-          <Loader size={32} />
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <>
       <div className="container mx-auto py-10">
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[200px]">Name</TableHead>
-                <TableHead className="w-[100px]">Type</TableHead>
-                <TableHead className="w-[100px]">Scopes</TableHead>
-                <TableHead className="w-[200px]">Value</TableHead>
-                <TableHead>Description</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(groupedVars).map(([collectionId, group]) => (
-                <React.Fragment key={collectionId}>
-                  <TableRow className="bg-muted/50">
-                    <TableCell colSpan={5} className="py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{group.collection.name}</span>
-                        {group.collection.remote && (
-                          <Badge variant="secondary" className="text-xs">Remote</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {group.variables.map((v) => (
-                    <TableRow key={v.id}>
-                      <TableCell className="font-medium">{v.name}</TableCell>
-                      <TableCell>{v.resolvedType}</TableCell>
-                      <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
-                      <TableCell>
+        <div className="mb-6 space-y-4">
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="FigmaファイルのURLまたはファイルキーを入力してください (例: WZ1EEljhqZdxA3FCYasvz1)"
+              value={figmaUrl}
+              onChange={(e) => setFigmaUrl(e.target.value)}
+              className="flex-1"
+            />
+            <Button onClick={handleFetchFromUrl} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader size={16} className="mr-2" />
+                  取得中...
+                </>
+              ) : (
+                "取得"
+              )}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            FigmaファイルのURLまたはファイルキーを入力して変数を取得できます。
+          </p>
+        </div>
+
+        {Object.keys(groupedVars).length === 0 && !loading ? (
+          <div className="flex min-h-[400px] items-center justify-center rounded-md border">
+            <div className="text-center">
+              <p className="text-muted-foreground">FigmaファイルのURLを入力して変数を取得してください</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Name</TableHead>
+                  <TableHead className="w-[100px]">Type</TableHead>
+                  <TableHead className="w-[100px]">Scopes</TableHead>
+                  <TableHead className="w-[200px]">Value</TableHead>
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(groupedVars).map(([collectionId, group]) => (
+                  <React.Fragment key={collectionId}>
+                    <TableRow className="bg-muted/50">
+                      <TableCell colSpan={5} className="py-2">
                         <div className="flex items-center gap-2">
-                          {v.resolvedType === "COLOR" && (
-                            <div
-                              className="w-4 h-4 rounded border"
-                              style={{ backgroundColor: v.value }}
-                            />
+                          <span className="font-semibold">{group.collection.name}</span>
+                          {group.collection.remote && (
+                            <Badge variant="secondary" className="text-xs">Remote</Badge>
                           )}
-                          {v.value}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        <Input
-                          value={v.description || ""}
-                          onChange={(e) => updateDescription(v.id, e.target.value)}
-                          className="h-6 text-xs"
-                          placeholder="説明を入力..."
-                        />
-                      </TableCell>
                     </TableRow>
-                  ))}
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader size={16} className="mr-2" />
-                保存中...
-              </>
-            ) : (
-              "保存"
-            )}
-          </Button>
-        </div>
+                    {group.variables.map((v) => (
+                      <TableRow key={v.id}>
+                        <TableCell className="font-medium">{v.name}</TableCell>
+                        <TableCell>{v.resolvedType}</TableCell>
+                        <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {v.resolvedType === "COLOR" && (
+                              <div
+                                className="w-4 h-4 rounded border"
+                                style={{ backgroundColor: v.value }}
+                              />
+                            )}
+                            {v.value}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          <Input
+                            value={v.description || ""}
+                            onChange={(e) => updateDescription(v.id, e.target.value)}
+                            className="h-6 text-xs"
+                            placeholder="説明を入力..."
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {Object.keys(groupedVars).length > 0 && (
+          <div className="mt-4 flex justify-end">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader size={16} className="mr-2" />
+                  保存中...
+                </>
+              ) : (
+                "保存"
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       <ToastProvider>
