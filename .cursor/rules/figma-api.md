@@ -1,0 +1,2 @@
+- https://www.figma.com/plugin-docs/api/Variable/
+- https://www.figma.com/developers/api#variables

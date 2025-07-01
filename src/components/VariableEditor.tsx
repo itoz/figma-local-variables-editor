@@ -85,7 +85,7 @@ export default function VariableEditor() {
   const [variables, setVariables] = useState<Variable[]>([]);
   const [groupedVars, setGroupedVars] = useState<GroupedVariables>({});
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [figmaUrl, setFigmaUrl] = useState("WZ1EEljhqZdxA3FCYasvz1");
   const [toast, setToast] = useState<ToastState>({
     open: false,
@@ -243,39 +243,76 @@ export default function VariableEditor() {
     );
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const updateDescription = (variableId: string, description: string) => {
+    // Update local state only, don't send API request immediately
+    setVariables((prev) =>
+      prev.map((v) =>
+        v.id === variableId ? { ...v, description } : v
+      )
+    );
+
+    // Update grouped variables as well
+    setGroupedVars((prev) => {
+      const newGrouped = { ...prev };
+      Object.keys(newGrouped).forEach(collectionId => {
+        newGrouped[collectionId] = {
+          ...newGrouped[collectionId],
+          variables: newGrouped[collectionId].variables.map(v =>
+            v.id === variableId ? { ...v, description } : v
+          )
+        };
+      });
+      return newGrouped;
+    });
+  };
+
+  const updateSingleVariable = async (variableId: string) => {
+    setUpdatingIds(prev => new Set(prev).add(variableId));
+
     try {
-      for (const v of variables) {
-        let newValue: any;
+      const variable = variables.find((v) => v.id === variableId);
+      if (!variable) return;
 
-        if (v.resolvedType === "COLOR") {
-          const match = v.value.match(
-            /rgba?\((\d+),\s*(\d+),\s*(\d+),\s*(\d+(\.\d+)?)\)/
-          );
-          if (!match) continue;
-          const [_, r, g, b, a] = match;
-          newValue = {
-            r: parseInt(r) / 255,
-            g: parseInt(g) / 255,
-            b: parseInt(b) / 255,
-            a: parseFloat(a),
-          };
-        } else if (v.resolvedType === "FLOAT") {
-          newValue = parseFloat(v.value);
+      // Update both value and description
+      let newValue: any;
+
+      if (variable.resolvedType === "COLOR") {
+        const match = variable.value.match(
+          /rgba?\((\d+),\s*(\d+),\s*(\d+),\s*(\d+(\.\d+)?)\)/
+        );
+        if (!match) {
+          throw new Error("Invalid color format");
         }
+        const [_, r, g, b, a] = match;
+        newValue = {
+          r: parseInt(r) / 255,
+          g: parseInt(g) / 255,
+          b: parseInt(b) / 255,
+          a: parseFloat(a),
+        };
+      } else if (variable.resolvedType === "FLOAT") {
+        newValue = parseFloat(variable.value);
+      }
 
-        await updateVariable(v.id, v.modeId, newValue);
+      // Update the variable value
+      await updateVariable(variable.id, variable.modeId, newValue);
+
+      // Update the description if it exists
+      if (variable.description !== undefined && variable.description !== null) {
+        await updateVariable(variable.id, variable.modeId, {
+          type: "DESCRIPTION_UPDATE",
+          description: variable.description,
+        });
       }
 
       setToast({
         open: true,
         title: "成功",
-        description: "変数を更新しました。",
+        description: `変数 "${variable.name}" を更新しました。`,
         variant: "default",
       });
     } catch (error) {
-      console.error("Failed to save variables:", error);
+      console.error("Failed to update variable:", error);
       setToast({
         open: true,
         title: "エラー",
@@ -283,45 +320,13 @@ export default function VariableEditor() {
         variant: "destructive",
       });
     } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateDescription = async (variableId: string, description: string) => {
-    try {
-      const variable = variables.find((v) => v.id === variableId);
-      if (!variable) return;
-
-      await updateVariable(variableId, variable.modeId, {
-        type: "DESCRIPTION_UPDATE",
-        description,
-      });
-
-      // Update local state
-      setVariables((prev) =>
-        prev.map((v) =>
-          v.id === variableId ? { ...v, description } : v
-        )
-      );
-
-      setToast({
-        open: true,
-        title: "成功",
-        description: "説明を更新しました。",
-        variant: "default"
-      });
-    } catch (error) {
-      console.error("Failed to update description:", error);
-      setToast({
-        open: true,
-        title: "エラー",
-        description: "説明の更新に失敗しました。",
-        variant: "destructive",
+      setUpdatingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(variableId);
+        return newSet;
       });
     }
   };
-
-
 
   return (
     <>
@@ -367,13 +372,14 @@ export default function VariableEditor() {
                   <TableHead className="w-[100px]">Scopes</TableHead>
                   <TableHead className="w-[200px]">Value</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {Object.entries(groupedVars).map(([collectionId, group]) => (
                   <React.Fragment key={collectionId}>
                     <TableRow className="bg-muted/50">
-                      <TableCell colSpan={5} className="py-2">
+                      <TableCell colSpan={6} className="py-2">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{group.collection.name}</span>
                           {group.collection.remote && (
@@ -395,7 +401,12 @@ export default function VariableEditor() {
                                 style={{ backgroundColor: v.value }}
                               />
                             )}
-                            {v.value}
+                            <Input
+                              value={v.value}
+                              onChange={(e) => handleChange(v.id, e.target.value)}
+                              className="h-6 text-xs"
+                              placeholder="値を入力..."
+                            />
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -406,6 +417,23 @@ export default function VariableEditor() {
                             placeholder="説明を入力..."
                           />
                         </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            onClick={() => updateSingleVariable(v.id)}
+                            disabled={updatingIds.has(v.id)}
+                            className="h-6 px-2 text-xs"
+                          >
+                            {updatingIds.has(v.id) ? (
+                              <>
+                                <Loader size={12} className="mr-1" />
+                                更新中
+                              </>
+                            ) : (
+                              "POST"
+                            )}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </React.Fragment>
@@ -415,20 +443,7 @@ export default function VariableEditor() {
           </div>
         )}
 
-        {Object.keys(groupedVars).length > 0 && (
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader size={16} className="mr-2" />
-                  保存中...
-                </>
-              ) : (
-                "保存"
-              )}
-            </Button>
-          </div>
-        )}
+
       </div>
 
       <ToastProvider>
