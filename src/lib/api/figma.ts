@@ -10,20 +10,40 @@ export async function getVariables(fileKey?: string) {
 export async function updateVariable(
   variableId: string,
   modeId: string,
-  value: any
+  value: any,
+  fileKey: string
 ) {
+  const requestBody = {
+    variableId,
+    fileKey,
+    ...(value.type === "DESCRIPTION_UPDATE"
+      ? { description: value.description }
+      : { valuesByMode: { [modeId]: value } }),
+  };
+
+  console.log("updateVariable called with:", {
+    variableId,
+    modeId,
+    value,
+    fileKey,
+    requestBody,
+  });
+
   const res = await fetch("/api/figma/variables", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      variableId,
-      ...(value.type === "DESCRIPTION_UPDATE"
-        ? { description: value.description }
-        : { valuesByMode: { [modeId]: value } }),
-    }),
+    body: JSON.stringify(requestBody),
   });
-  if (!res.ok) throw new Error("Failed to update variable");
+
+  console.log("Response status:", res.status);
+  console.log("Response ok:", res.ok);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error("Update variable failed:", errorText);
+    throw new Error("Failed to update variable");
+  }
   return res.json();
 }

@@ -31,6 +31,9 @@ type Variable = {
   value: string;
   description?: string;
   scopes?: string[];
+  variableCollectionId?: string;
+  remote?: boolean;
+  key?: string;
 };
 
 type VariableCollection = {
@@ -87,6 +90,7 @@ export default function VariableEditor() {
   const [loading, setLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [figmaUrl, setFigmaUrl] = useState("WZ1EEljhqZdxA3FCYasvz1");
+  const [fileKey, setFileKey] = useState<string>("");
   const [toast, setToast] = useState<ToastState>({
     open: false,
     title: "",
@@ -123,8 +127,8 @@ export default function VariableEditor() {
       return;
     }
 
-    const fileKey = extractFileKey(figmaUrl);
-    if (!fileKey) {
+    const extractedFileKey = extractFileKey(figmaUrl);
+    if (!extractedFileKey) {
       setToast({
         open: true,
         title: "エラー",
@@ -134,7 +138,8 @@ export default function VariableEditor() {
       return;
     }
 
-    fetchVariables(fileKey);
+    setFileKey(extractedFileKey);
+    fetchVariables(extractedFileKey);
   };
 
   const fetchVariables = async (fileKey?: string) => {
@@ -212,6 +217,9 @@ export default function VariableEditor() {
               value,
               description: v.description,
               scopes: v.scopes,
+              variableCollectionId: v.variableCollectionId,
+              remote: v.remote,
+              key: v.key,
             };
           });
 
@@ -223,7 +231,24 @@ export default function VariableEditor() {
       }, {});
 
       setGroupedVars(groupedVars);
-      setVariables(Object.values(groupedVars).flatMap(g => g.variables));
+      const allVariables = Object.values(groupedVars).flatMap(g => g.variables);
+      setVariables(allVariables);
+
+      // Log variable details for debugging
+      console.log("=== Variable Details ===");
+      allVariables.forEach(variable => {
+        if (variable.name.includes('disabled') || variable.name.includes('text')) {
+          console.log(`Variable: ${variable.name}`, {
+            id: variable.id,
+            name: variable.name,
+            remote: variable.remote,
+            key: variable.key,
+            variableCollectionId: variable.variableCollectionId,
+            resolvedType: variable.resolvedType
+          });
+        }
+      });
+      console.log("=== End Variable Details ===");
     } catch (error) {
       console.error("Failed to fetch variables:", error);
       setToast({
@@ -295,14 +320,14 @@ export default function VariableEditor() {
       }
 
       // Update the variable value
-      await updateVariable(variable.id, variable.modeId, newValue);
+      await updateVariable(variable.id, variable.modeId, newValue, fileKey);
 
       // Update the description if it exists
       if (variable.description !== undefined && variable.description !== null) {
         await updateVariable(variable.id, variable.modeId, {
           type: "DESCRIPTION_UPDATE",
           description: variable.description,
-        });
+        }, fileKey);
       }
 
       setToast({
@@ -317,6 +342,64 @@ export default function VariableEditor() {
         open: true,
         title: "エラー",
         description: "変数の更新に失敗しました。",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(variableId);
+        return newSet;
+      });
+    }
+  };
+
+  const updateDescriptionOnly = async (variableId: string) => {
+    setUpdatingIds(prev => new Set(prev).add(variableId));
+
+    try {
+      const variable = variables.find((v) => v.id === variableId);
+      if (!variable) {
+        console.error("Variable not found:", variableId);
+        return;
+      }
+
+      console.log("Updating description for variable:", {
+        id: variable.id,
+        name: variable.name,
+        description: variable.description,
+        modeId: variable.modeId,
+        fileKey: fileKey
+      });
+
+      // Check if this is a remote variable
+      if (variable.remote) {
+        setToast({
+          open: true,
+          title: "エラー",
+          description: "リモート変数の説明は更新できません。元のファイルで編集してください。",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update only the description
+      await updateVariable(variable.id, variable.modeId, {
+        type: "DESCRIPTION_UPDATE",
+        description: variable.description || "",
+      }, fileKey);
+
+      setToast({
+        open: true,
+        title: "成功",
+        description: `変数 "${variable.name}" の説明を更新しました。`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Failed to update description:", error);
+      setToast({
+        open: true,
+        title: "エラー",
+        description: "説明の更新に失敗しました。",
         variant: "destructive",
       });
     } finally {
@@ -390,7 +473,12 @@ export default function VariableEditor() {
                     </TableRow>
                     {group.variables.map((v) => (
                       <TableRow key={v.id}>
-                        <TableCell className="font-medium">{v.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {v.name}
+                          {v.remote && (
+                            <Badge variant="secondary" className="ml-2 text-xs">Remote</Badge>
+                          )}
+                        </TableCell>
                         <TableCell>{v.resolvedType}</TableCell>
                         <TableCell className="text-xs">{v.scopes?.join(", ")}</TableCell>
                         <TableCell>
@@ -414,25 +502,44 @@ export default function VariableEditor() {
                             value={v.description || ""}
                             onChange={(e) => updateDescription(v.id, e.target.value)}
                             className="h-6 text-xs"
-                            placeholder="説明を入力..."
+                            placeholder={v.remote ? "リモート変数は編集不可" : "説明を入力..."}
+                            disabled={v.remote}
                           />
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => updateSingleVariable(v.id)}
-                            disabled={updatingIds.has(v.id)}
-                            className="h-6 px-2 text-xs"
-                          >
-                            {updatingIds.has(v.id) ? (
-                              <>
-                                <Loader size={12} className="mr-1" />
-                                更新中
-                              </>
-                            ) : (
-                              "POST"
-                            )}
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              onClick={() => updateSingleVariable(v.id)}
+                              disabled={updatingIds.has(v.id) || v.remote}
+                              className="h-6 px-2 text-xs"
+                            >
+                              {updatingIds.has(v.id) ? (
+                                <>
+                                  <Loader size={12} className="mr-1" />
+                                  更新中
+                                </>
+                              ) : (
+                                "値"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateDescriptionOnly(v.id)}
+                              disabled={updatingIds.has(v.id) || v.remote}
+                              className="h-6 px-2 text-xs"
+                            >
+                              {updatingIds.has(v.id) ? (
+                                <>
+                                  <Loader size={12} className="mr-1" />
+                                  更新中
+                                </>
+                              ) : (
+                                "説明"
+                              )}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
