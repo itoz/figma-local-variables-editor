@@ -666,10 +666,15 @@ export default function VariableEditor() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge variant="secondary" className="ml-2 text-xs cursor-help">
-                                  Remote
+                                  {(v.key && remoteInfoMap.current[v.key]?.name) || "Remote"}
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
+                                {v.key && remoteInfoMap.current[v.key]?.name && (
+                                  <div className="text-xs font-semibold mb-1">
+                                    {remoteInfoMap.current[v.key]?.name}
+                                  </div>
+                                )}
                                 <div className="text-xs font-mono break-all">
                                   {v.key}
                                 </div>
