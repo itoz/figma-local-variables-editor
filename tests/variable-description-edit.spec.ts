@@ -8,7 +8,7 @@ test.describe("Variable Description Editing", () => {
     // ファイルキー入力フィールドにテスト用のファイルキーを設定
     const fileKeyInput = page.locator('input[placeholder*="Figma"]');
     await expect(fileKeyInput).toBeVisible();
-    await fileKeyInput.fill("WZ1EEljhqZdxA3FCYasvz1");
+    await fileKeyInput.fill("");
 
     // 取得ボタンをクリックしてデータを読み込み
     const loadButton = page.locator("button").filter({ hasText: "読み込み" });
@@ -192,7 +192,7 @@ test.describe("Variable Description Editing", () => {
 
     // データを再取得
     const fileKeyInput = page.locator('input[placeholder*="Figma"]');
-    await fileKeyInput.fill("WZ1EEljhqZdxA3FCYasvz1");
+    await fileKeyInput.fill("");
     const loadButton = page.locator("button").filter({ hasText: "読み込み" });
     await loadButton.click();
 

@@ -13,7 +13,7 @@ test.describe("Figma Variables Data Fetching", () => {
     await expect(fileKeyInput).toBeVisible();
 
     // テスト用のファイルキーを入力
-    await fileKeyInput.fill("WZ1EEljhqZdxA3FCYasvz1");
+    await fileKeyInput.fill("");
 
     // 読み込みボタンを見つけてクリック
     const loadButton = page.locator("button").filter({ hasText: "読み込み" });
@@ -56,9 +56,7 @@ test.describe("Figma Variables Data Fetching", () => {
     await page.goto("/");
 
     // データを読み込み
-    await page
-      .locator('input[placeholder*="Figma"]')
-      .fill("WZ1EEljhqZdxA3FCYasvz1");
+    await page.locator('input[placeholder*="Figma"]').fill("");
     await page.locator("button").filter({ hasText: "読み込み" }).click();
 
     // APIレスポンスを待機
@@ -84,9 +82,7 @@ test.describe("Figma Variables Data Fetching", () => {
     await page.goto("/");
 
     // データを読み込み
-    await page
-      .locator('input[placeholder*="Figma"]')
-      .fill("WZ1EEljhqZdxA3FCYasvz1");
+    await page.locator('input[placeholder*="Figma"]').fill("");
     await page.locator("button").filter({ hasText: "読み込み" }).click();
 
     // APIレスポンスを待機
@@ -114,9 +110,7 @@ test.describe("Figma Variables Data Fetching", () => {
     await page.goto("/");
 
     // データを読み込み
-    await page
-      .locator('input[placeholder*="Figma"]')
-      .fill("WZ1EEljhqZdxA3FCYasvz1");
+    await page.locator('input[placeholder*="Figma"]').fill("");
     await page.locator("button").filter({ hasText: "読み込み" }).click();
 
     // APIレスポンスを待機
@@ -154,9 +148,7 @@ test.describe("Figma Variables Data Fetching", () => {
     await page.goto("/");
 
     // データを読み込み
-    await page
-      .locator('input[placeholder*="Figma"]')
-      .fill("WZ1EEljhqZdxA3FCYasvz1");
+    await page.locator('input[placeholder*="Figma"]').fill("");
     await page.locator("button").filter({ hasText: "読み込み" }).click();
 
     // APIレスポンスを待機

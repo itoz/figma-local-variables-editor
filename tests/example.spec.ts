@@ -23,7 +23,7 @@ test("file key input and load functionality", async ({ page }) => {
   await expect(fileKeyInput).toBeVisible();
 
   // Enter a test file key
-  await fileKeyInput.fill("WZ1EEljhqZdxA3FCYasvz1");
+  await fileKeyInput.fill("");
 
   // Click the load button
   const loadButton = page.locator("button").filter({ hasText: "読み込み" });
@@ -41,9 +41,7 @@ test("variable table displays correctly", async ({ page }) => {
   await page.goto("/");
 
   // Enter file key and load
-  await page
-    .locator('input[placeholder*="Figma"]')
-    .fill("WZ1EEljhqZdxA3FCYasvz1");
+  await page.locator('input[placeholder*="Figma"]').fill("");
   await page.locator("button").filter({ hasText: "読み込み" }).click();
 
   // Wait for loading
@@ -68,9 +66,7 @@ test("color variables show color preview", async ({ page }) => {
   await page.goto("/");
 
   // Load variables
-  await page
-    .locator('input[placeholder*="Figma"]')
-    .fill("WZ1EEljhqZdxA3FCYasvz1");
+  await page.locator('input[placeholder*="Figma"]').fill("");
   await page.locator("button").filter({ hasText: "読み込み" }).click();
   await page.waitForTimeout(5000);
 
@@ -83,9 +79,7 @@ test("description editing functionality", async ({ page }) => {
   await page.goto("/");
 
   // Load variables
-  await page
-    .locator('input[placeholder*="Figma"]')
-    .fill("WZ1EEljhqZdxA3FCYasvz1");
+  await page.locator('input[placeholder*="Figma"]').fill("");
   await page.locator("button").filter({ hasText: "読み込み" }).click();
   await page.waitForTimeout(5000);
 

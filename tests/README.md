@@ -20,7 +20,7 @@
    FIGMA_TOKEN=your_figma_token_here
    ```
 
-3. **テストファイル**: `WZ1EEljhqZdxA3FCYasvz1`の Figma ファイルにアクセス可能である必要があります
+3. **テストファイル**: 有効な Figma ファイルキーが必要です（テストでは空文字列を使用）
 
 ### テスト実行方法
 
