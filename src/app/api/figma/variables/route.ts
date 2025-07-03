@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const fileKey = searchParams.get("fileKey") || process.env.FIGMA_FILE_KEY;
+    const fileKey = searchParams.get("fileKey");
 
     if (!fileKey) {
       return NextResponse.json(
