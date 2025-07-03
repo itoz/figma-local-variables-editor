@@ -39,9 +39,9 @@ This is a web application that allows you to edit Figma local variables directly
 
 ## Environment Variables
 
-| Variable      | Description                                                                           | Required |
-| ------------- | ------------------------------------------------------------------------------------- | -------- |
-| `FIGMA_TOKEN` | Your Figma personal access token. You can generate one in your Figma account settings | Yes      |
+| Variable      | Description                                                                                     | Required |
+| ------------- | ----------------------------------------------------------------------------------------------- | -------- |
+| `FIGMA_TOKEN` | Figma personal access token **with scopes:** File content → Read-only, Variables → Read & Write | Yes      |
 
 ## How to get Figma Access Token
 
@@ -50,6 +50,17 @@ This is a web application that allows you to edit Figma local variables directly
 3. Click "Generate new token"
 4. Give your token a name and copy it
 5. Paste the token in your `.env.local` file
+
+### Required Token Scopes
+
+When generating the token, enable the following permissions:
+
+| API Scope        | Level        |
+| ---------------- | ------------ |
+| **File content** | Read-only    |
+| **Variables**    | Read & Write |
+
+Without these scopes the application will not be able to fetch or update variables.
 
 ## Development
 
@@ -65,7 +76,3 @@ To learn more about the technologies used in this project:
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Figma API Documentation](https://www.figma.com/developers/api)
-
-## License
-
-MIT
