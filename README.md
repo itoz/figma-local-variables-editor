@@ -25,8 +25,7 @@ This is a web application that allows you to edit Figma local variables directly
    ```
 3. Set up your environment variables in `.env.local`:
    ```
-   FIGMA_ACCESS_TOKEN=your_figma_access_token
-   FIGMA_FILE_KEY=your_figma_file_key
+   FIGMA_TOKEN=your_figma_access_token
    ```
 4. Install dependencies:
    ```bash
@@ -40,10 +39,9 @@ This is a web application that allows you to edit Figma local variables directly
 
 ## Environment Variables
 
-| Variable         | Description                                                                       | Required |
-| ---------------- | --------------------------------------------------------------------------------- | -------- |
-| `FIGMA_TOKEN`    | Your Figma access token. You can get it from your Figma account settings          | Yes      |
-| `FIGMA_FILE_KEY` | The file key of your Figma file (found in the URL: figma.com/file/{FILE_KEY}/...) | Yes      |
+| Variable      | Description                                                                           | Required |
+| ------------- | ------------------------------------------------------------------------------------- | -------- |
+| `FIGMA_TOKEN` | Your Figma personal access token. You can generate one in your Figma account settings | Yes      |
 
 ## How to get Figma Access Token
 
