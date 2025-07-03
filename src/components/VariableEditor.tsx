@@ -34,7 +34,7 @@ import React, { useState } from "react";
 type Variable = {
   id: string;
   name: string;
-  resolvedType: "COLOR" | "FLOAT";
+  resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN";
   modeId: string;
   value: string;
   description?: string;
@@ -44,6 +44,7 @@ type Variable = {
   key?: string;
   isAlias?: boolean;
   aliasTarget?: string;
+  codeSyntax?: { [key: string]: string };
 };
 
 type VariableCollection = {
@@ -58,7 +59,7 @@ type VariableCollection = {
 type VariableData = {
   id: string;
   name: string;
-  resolvedType: "COLOR" | "FLOAT";
+  resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN";
   valuesByMode: {
     [key: string]: any;
   };
@@ -67,6 +68,7 @@ type VariableData = {
   variableCollectionId: string;
   remote?: boolean;
   key?: string;
+  codeSyntax?: { [key: string]: string };
 };
 
 type VariablesResponse = {
@@ -357,6 +359,7 @@ export default function VariableEditor() {
               key: v.key,
               isAlias,
               aliasTarget,
+              codeSyntax: v.codeSyntax,
             };
           });
 
@@ -669,9 +672,22 @@ export default function VariableEditor() {
                                 </Tooltip>
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {v.resolvedType === "COLOR" ? rgbaToHex(v.value) : v.value}
-                              </span>
+                              v.resolvedType === "COLOR" ? (
+                                <span className="text-xs text-muted-foreground">{rgbaToHex(v.value)}</span>
+                              ) : v.codeSyntax && Object.keys(v.codeSyntax).length > 0 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="text-xs font-mono cursor-help bg-gray-100 hover:bg-gray-200">
+                                      {v.codeSyntax.WEB || Object.values(v.codeSyntax)[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="text-xs">{v.value}</div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">{v.value}</span>
+                              )
                             )}
                           </div>
                         </TableCell>
