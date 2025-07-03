@@ -401,7 +401,10 @@ export default function VariableEditor() {
 
       const uniqueRemoteKeys = Array.from(new Set(remoteKeys));
 
+      const isFileKey = (k: string) => /^[a-zA-Z0-9]{22}$/.test(k);
+
       uniqueRemoteKeys.forEach(async (rk) => {
+        if (!isFileKey(rk)) return; // Skip non-file keys to avoid 404
         if (!remoteInfoMap.current[rk]) {
           try {
             const info = await getFileInfo(rk);
