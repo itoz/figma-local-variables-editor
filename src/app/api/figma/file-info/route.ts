@@ -13,11 +13,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const res = await axios.get(`https://api.figma.com/v1/files/${fileKey}`, {
-      headers: {
-        "X-Figma-Token": process.env.FIGMA_TOKEN,
-      },
-    });
+    const res = await axios.get(
+      `https://api.figma.com/v1/files/${fileKey}?branch_data=true`,
+      {
+        headers: {
+          "X-Figma-Token": process.env.FIGMA_TOKEN,
+        },
+      }
+    );
 
     // Extract relevant file information
     const fileInfo = {
@@ -28,6 +31,7 @@ export async function GET(request: Request) {
       role: res.data.role,
       editorType: res.data.editorType,
       linkAccess: res.data.linkAccess,
+      mainFileKey: res.data.mainFileKey ?? null,
     };
 
     return NextResponse.json(fileInfo);

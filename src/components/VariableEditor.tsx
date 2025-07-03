@@ -29,7 +29,7 @@ import {
 import { getFileInfo, getVariables, updateVariable as updateVariableAPI } from "@/lib/api/figma";
 // import { convertVariablesToExportFormat, exportVariablesToFile } from "@/lib/api/figma"; // Temporarily disabled
 import { rgbaToHex } from "@/lib/utils";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 type Variable = {
   id: string;
@@ -123,6 +123,10 @@ export default function VariableEditor() {
     description: "",
     variant: "default",
   });
+  // キャッシュ: remoteKey -> FileInfo (mainFileKey 判定用)
+  const remoteInfoMap = useRef<{ [key: string]: FileInfo & { mainFileKey?: string | null } }>(
+    {}
+  );
 
   // Extract file key from Figma URL or return as-is if it's already a file key
   const extractFileKey = (input: string): string | null => {
@@ -389,6 +393,26 @@ export default function VariableEditor() {
         }
       });
       console.log("=== End Variable Details ===");
+
+      // ---- Fetch remote file info for Remote variables (once per key) ----
+      const remoteKeys = allVariables
+        .filter((v) => v.remote && v.key)
+        .map((v) => v.key as string);
+
+      const uniqueRemoteKeys = Array.from(new Set(remoteKeys));
+
+      uniqueRemoteKeys.forEach(async (rk) => {
+        if (!remoteInfoMap.current[rk]) {
+          try {
+            const info = await getFileInfo(rk);
+            remoteInfoMap.current[rk] = info;
+            // Trigger re-render
+            setGroupedVars((prev) => ({ ...prev }));
+          } catch (e) {
+            console.warn("Failed to fetch remote file info for", rk);
+          }
+        }
+      });
     } catch (error) {
       console.error("Failed to fetch variables:", error);
       setToast({
@@ -636,7 +660,22 @@ export default function VariableEditor() {
                         <TableCell className="font-medium">
                           {v.name}
                           {v.remote && (
-                            <Badge variant="secondary" className="ml-2 text-xs">Remote</Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="secondary" className="ml-2 text-xs cursor-help">
+                                  Remote
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="text-xs font-mono break-all">
+                                  {v.key}
+                                </div>
+                                {v.key && remoteInfoMap.current[v.key] &&
+                                  remoteInfoMap.current[v.key].mainFileKey === fileKey && (
+                                    <div className="mt-1 text-xs text-green-700">Branch of current file</div>
+                                  )}
+                              </TooltipContent>
+                            </Tooltip>
                           )}
                         </TableCell>
                         <TableCell>{v.resolvedType}</TableCell>
