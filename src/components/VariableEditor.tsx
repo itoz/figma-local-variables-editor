@@ -656,10 +656,14 @@ export default function VariableEditor() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <div className="space-y-1">
-                                      {v.resolvedType === "COLOR" && (
-                                        <div className="text-xs">HEX: {rgbaToHex(v.value)}</div>
+                                      {v.resolvedType === "COLOR" ? (
+                                        <>
+                                          <div className="text-xs">HEX: {rgbaToHex(v.value)}</div>
+                                          <div className="text-xs">RGBA: {v.value}</div>
+                                        </>
+                                      ) : (
+                                        <div className="text-xs">{v.value}</div>
                                       )}
-                                      <div className="text-xs">RGBA: {v.value}</div>
                                     </div>
                                   </TooltipContent>
                                 </Tooltip>
